@@ -1,0 +1,42 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: prompt-lab-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ssh key
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync source
+        run: |
+          rsync -avzr --delete \
+            --exclude=.git --exclude=.env --exclude=data \
+            --exclude=.deploy --exclude=__pycache__ \
+            ./ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/prompt_lab/"
+
+      - name: Rebuild and restart
+        run: |
+          ssh "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" '
+            set -e
+            cd /opt/prompt_lab
+            docker compose up -d --build
+            docker compose ps
+            docker compose exec -T app python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health')"
+          '

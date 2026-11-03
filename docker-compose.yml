@@ -1,0 +1,29 @@
+services:
+  app:
+    build: ./app
+    container_name: prompt_lab
+    restart: unless-stopped
+    environment:
+      ACCESS_TOKEN: ${ACCESS_TOKEN:?ACCESS_TOKEN is required}
+      DB_PATH: /data/prompt_lab.db
+    volumes:
+      - ./data:/data
+    networks:
+      - default
+      - proxy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health')
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  # 复用现有 mianshidao 项目的网络，由它的 Caddy 按域名反代到本服务。
+  # 服务本身不发布宿主机端口，公网只能经 Caddy(443) 访问。
+  proxy:
+    external: true
+    name: mianshidao_default
