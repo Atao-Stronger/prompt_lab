@@ -50,7 +50,16 @@ jobs:
               set -e
               docker compose up -d --build
               docker compose ps
-              docker compose exec -T app python -c "import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/api/health\")"
+              ok=0
+              for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+                if docker compose exec -T app python -c "import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/api/health\")" >/dev/null 2>&1; then
+                  ok=1
+                  echo "health ok after ${i}s"
+                  break
+                fi
+                sleep 1
+              done
+              test "$ok" = 1
             ) > /tmp/ci-deploy.log 2>&1
             rc=$?
             tail -25 /tmp/ci-deploy.log
