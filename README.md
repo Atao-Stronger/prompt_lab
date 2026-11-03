@@ -60,13 +60,13 @@ git push origin main
        └─ ssh: docker compose up -d --build
 ```
 
-仓库 Settings → Secrets and variables → Actions 需要三个 secret：
+仓库 Settings → Secrets and variables → Actions 只需要一个 secret：
 
 | Secret | 值 |
 | --- | --- |
-| `SSH_HOST` | `121.43.126.201` |
-| `SSH_USER` | `deploy` |
 | `SSH_KEY` | 部署私钥全文（含 `BEGIN`/`END` 行） |
+
+部署主机（`121.43.126.201`）和用户（`deploy`）直接写在 workflow 的 `env` 里，不属于敏感信息。
 
 ## 运维备注
 
