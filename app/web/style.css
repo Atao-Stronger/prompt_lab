@@ -194,6 +194,38 @@ button, input, textarea, select {
   text-overflow: ellipsis;
 }
 .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+.preview-box { margin: 8px 0 10px; }
+.preview {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 12.5px/1.65 "Cascadia Code", Consolas, "Microsoft YaHei", monospace;
+  color: #374151;
+  background: #f9fafb;
+  border: 1px solid #eef0f3;
+  border-radius: 8px;
+  padding: 9px 11px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 10;
+  overflow: hidden;
+}
+.item.expanded .preview {
+  display: block;
+  -webkit-line-clamp: unset;
+  max-height: none;
+}
+.more {
+  display: none;
+  margin-top: 5px;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+.item.has-more .more { display: inline-block; }
 .tag {
   font-size: 12px;
   color: #4b5563;

@@ -17,6 +17,7 @@ const state = {
   activeIndex: -1,
   editing: null,
   copyTarget: null,
+  expanded: new Set(),
 };
 
 const el = (id) => document.getElementById(id);
@@ -156,13 +157,18 @@ function renderList() {
 
   el("list").innerHTML = list.map((prompt, index) => {
     const tags = (prompt.tags || []).map((tag) => `<span class="tag">${esc(tag)}</span>`).join("");
+    const expanded = state.expanded.has(prompt.id);
     return `
-      <article class="item ${index === state.activeIndex ? "active" : ""}"
+      <article class="item ${index === state.activeIndex ? "active" : ""} ${expanded ? "expanded" : ""}"
         data-id="${esc(prompt.id)}" data-index="${index}">
         <button class="star ${prompt.favorite ? "on" : ""}" data-act="star" title="收藏">★</button>
         <div class="item-main">
           <h3>${esc(prompt.title)}</h3>
           ${prompt.description ? `<p class="desc">${esc(prompt.description)}</p>` : ""}
+          ${prompt.content ? `<div class="preview-box">
+            <div class="preview">${esc(prompt.content)}</div>
+            <button class="more" data-act="more">${expanded ? "收起" : "展开"}</button>
+          </div>` : ""}
           <div class="meta">
             ${tags}
             <span class="dim">${esc(prompt.category || "未分类")}</span>
@@ -175,6 +181,27 @@ function renderList() {
         </div>
       </article>`;
   }).join("");
+
+  markOverflow();
+}
+
+function markOverflow() {
+  document.querySelectorAll(".item").forEach((item) => {
+    const preview = item.querySelector(".preview");
+    if (!preview) return;
+    item.classList.remove("has-more");
+    if (item.classList.contains("expanded")) {
+      item.classList.add("has-more");
+      return;
+    }
+    const clampedHeight = preview.clientHeight;
+    preview.style.display = "block";
+    preview.style.webkitLineClamp = "unset";
+    const fullHeight = preview.scrollHeight;
+    preview.style.display = "";
+    preview.style.webkitLineClamp = "";
+    if (fullHeight > clampedHeight + 2) item.classList.add("has-more");
+  });
 }
 
 /* ---------------- overlays ---------------- */
@@ -572,6 +599,15 @@ function bindEvents() {
       }).catch(() => toast("收藏状态同步失败"));
       return;
     }
+    if (action === "more") {
+      const isExpanded = state.expanded.has(prompt.id);
+      if (isExpanded) state.expanded.delete(prompt.id);
+      else state.expanded.add(prompt.id);
+      item.classList.toggle("expanded", !isExpanded);
+      const button = item.querySelector(".more");
+      if (button) button.textContent = isExpanded ? "展开" : "收起";
+      return;
+    }
     if (action === "edit") {
       openEditor(prompt);
       return;
@@ -638,8 +674,13 @@ function bindEvents() {
     }
   });
 
-  document.addEventListener("keydown", (event) => {
-    const tag = document.activeElement?.tagName;
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(markOverflow, 150);
+  });
+
+  document.addEventListener("keydown", (event) => {    const tag = document.activeElement?.tagName;
     const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
     const copyOpen = !el("copy-modal").classList.contains("hidden");
 
