@@ -45,9 +45,14 @@ jobs:
       - name: Rebuild and restart
         run: |
           ssh "$DEPLOY_USER@$DEPLOY_HOST" '
-            set -e
             cd /opt/prompt_lab
-            docker compose up -d --build
-            docker compose ps
-            docker compose exec -T app python -c "import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/api/health\")"
+            (
+              set -e
+              docker compose up -d --build
+              docker compose ps
+              docker compose exec -T app python -c "import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/api/health\")"
+            ) > /tmp/ci-deploy.log 2>&1
+            rc=$?
+            tail -25 /tmp/ci-deploy.log
+            exit $rc
           '
