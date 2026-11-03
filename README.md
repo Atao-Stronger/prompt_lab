@@ -38,17 +38,19 @@ ACCESS_TOKEN=devtoken DB_PATH=../data/dev.db uvicorn main:app --port 8080
 ## 线上架构
 
 ```
-浏览器 ──HTTPS──▶ Caddy (443, mianshidao 容器)
-                     │  按 SNI 匹配 promptlab.zhongtao.me
-                     ▼
-              prompt_lab:8080 (仅内网)
-                     │
-                     ▼
+浏览器 ──HTTPS──▶ 网关 (Caddy, 80/443, /opt/gateway)
+                     │  按域名分发
+        ┌────────────┴─────────────┐
+        ▼                          ▼
+ mianshidao_web:3000        prompt_lab:8080
+ (mianshidao 自己的网络)     (prompt_lab 自己的网络)
+
               SQLite /opt/prompt_lab/data/prompt_lab.db
 ```
 
-- 应用容器不发布宿主机端口，公网只能经 Caddy 访问，避免 HTTP 明文入口。
-- 证书由 Caddy 通过 HTTP-01 自动申请和续期。
+- 两个应用互不加入对方的 Docker 网络，也不共享容器；唯一的公共组件是独立网关。
+- 应用容器不发布宿主机端口，公网只能经网关访问，避免 HTTP 明文入口。
+- 证书由网关通过 HTTP-01 自动申请和续期。
 - 访问口令在服务器 `/opt/prompt_lab/.env`，不进仓库。
 
 ## 自动部署
@@ -70,8 +72,8 @@ git push origin main
 
 ## 运维备注
 
-- 服务器上的 `promptlab-caddy-route.timer` 每 2 分钟检查一次：如果 `/opt/mianshidao/Caddyfile`
-  被 `mianshidao` 的部署覆盖、丢了 `promptlab.zhongtao.me` 段，会自动补回并 reload Caddy。
+- 网关在 `/opt/gateway`，独立 compose，配置在 `/opt/gateway/Caddyfile`。
+  新增站点：改 Caddyfile 后 `docker exec gateway caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`，不中断现有站点。
 - 备份直接拷贝 `/opt/prompt_lab/data/prompt_lab.db` 即可；页面里也有「导出 JSON」。
 - 修改口令：编辑 `/opt/prompt_lab/.env` 后 `docker compose up -d`。
 
