@@ -20,7 +20,7 @@ app/                 FastAPI 服务
   main.py            接口 + 静态文件托管
   seed.py            首次启动的示例提示词
   web/               前端（index.html / app.js / style.css）
-docker-compose.yml   单容器，加入 mianshidao_default 网络，不发布宿主机端口
+docker-compose.yml   单容器，只用自己的网络，不发布宿主机端口
 .github/workflows/   push 到 main 后自动部署
 方案.md              设计文档
 ```
