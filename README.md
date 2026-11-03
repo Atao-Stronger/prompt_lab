@@ -2,6 +2,8 @@
 
 个人提示词库。FastAPI + SQLite 提供接口，原生 JS 单页做界面，数据存在服务器上，任何设备输入口令即可访问同一份内容。
 
+线上地址：<https://promptlab.zhongtao.me>
+
 ## 功能
 
 - 分类（10 个固定类目）+ 自由标签 + 全文搜索
@@ -18,8 +20,8 @@ app/                 FastAPI 服务
   main.py            接口 + 静态文件托管
   seed.py            首次启动的示例提示词
   web/               前端（index.html / app.js / style.css）
-docker-compose.yml   单容器部署，监听 8080
-.github/workflows/   GitHub Actions 自动部署
+docker-compose.yml   单容器，加入 mianshidao_default 网络，不发布宿主机端口
+.github/workflows/   push 到 main 后自动部署
 方案.md              设计文档
 ```
 
@@ -31,36 +33,50 @@ pip install -r requirements.txt
 ACCESS_TOKEN=devtoken DB_PATH=../data/dev.db uvicorn main:app --port 8080
 ```
 
-打开 http://127.0.0.1:8080 ，输入 `devtoken`。
+打开 <http://127.0.0.1:8080>，输入 `devtoken`。
 
-## 部署
-
-服务器一次性初始化（以 `deploy` 用户为例）：
-
-```bash
-sudo useradd -m -s /bin/bash deploy
-sudo usermod -aG docker deploy
-sudo mkdir -p /opt/prompt_lab && sudo chown deploy:deploy /opt/prompt_lab
-```
-
-在 `/opt/prompt_lab/.env` 写入：
+## 线上架构
 
 ```
-ACCESS_TOKEN=<随机口令>
+浏览器 ──HTTPS──▶ Caddy (443, mianshidao 容器)
+                     │  按 SNI 匹配 promptlab.zhongtao.me
+                     ▼
+              prompt_lab:8080 (仅内网)
+                     │
+                     ▼
+              SQLite /opt/prompt_lab/data/prompt_lab.db
 ```
 
-GitHub 仓库 Settings → Secrets and variables → Actions 添加：
+- 应用容器不发布宿主机端口，公网只能经 Caddy 访问，避免 HTTP 明文入口。
+- 证书由 Caddy 通过 HTTP-01 自动申请和续期。
+- 访问口令在服务器 `/opt/prompt_lab/.env`，不进仓库。
+
+## 自动部署
+
+```
+git push origin main
+  └─ GitHub Actions
+       ├─ rsync 源码 → deploy@server:/opt/prompt_lab/（保留 .env 与 data/）
+       └─ ssh: docker compose up -d --build
+```
+
+仓库 Settings → Secrets and variables → Actions 需要三个 secret：
 
 | Secret | 值 |
 | --- | --- |
-| `SSH_HOST` | 服务器 IP |
+| `SSH_HOST` | `121.43.126.201` |
 | `SSH_USER` | `deploy` |
-| `SSH_KEY` | 部署用私钥全文（包含 BEGIN/END 行） |
+| `SSH_KEY` | 部署私钥全文（含 `BEGIN`/`END` 行） |
 
-推送 `main` 后 Actions 会自动 rsync 源码并执行 `docker compose up -d --build`。
+## 运维备注
+
+- 服务器上的 `promptlab-caddy-route.timer` 每 2 分钟检查一次：如果 `/opt/mianshidao/Caddyfile`
+  被 `mianshidao` 的部署覆盖、丢了 `promptlab.zhongtao.me` 段，会自动补回并 reload Caddy。
+- 备份直接拷贝 `/opt/prompt_lab/data/prompt_lab.db` 即可；页面里也有「导出 JSON」。
+- 修改口令：编辑 `/opt/prompt_lab/.env` 后 `docker compose up -d`。
 
 ## 安全说明
 
-- 目前通过 HTTP 暴露，口令在传输中是明文。请使用足够长的随机口令，且不要在其他地方复用。
-- 如需 HTTPS，可后续接域名 + 反向代理，或改为仅内网访问。
-- 服务器上该部署用户属于 `docker` 组，等同于 root 权限，私钥请只放在 GitHub Secrets 里。
+- 已启用 HTTPS；口令在传输中加密。
+- 服务器 `root` 仍允许密码登录，且宝塔面板对公网开放（8888）。建议改用密钥登录并限制面板来源 IP。
+- 部署用户 `deploy` 属于 `docker` 组，等价于 root 权限，私钥只放在 GitHub Secrets。
