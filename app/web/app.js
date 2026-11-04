@@ -10,12 +10,14 @@ const state = {
   query: "",
   activeIndex: -1,
   editing: null,
+  detailTarget: null,
 };
 
 const el = (id) => document.getElementById(id);
 
 const editorModal = new bootstrap.Modal(el("editor-modal"));
 const historyModal = new bootstrap.Modal(el("history-modal"));
+const detailModal = new bootstrap.Modal(el("detail-modal"));
 const toastInstance = new bootstrap.Toast(el("toast"), { delay: 1800 });
 
 function esc(value) {
@@ -165,6 +167,7 @@ function buildCard(prompt, index) {
           <div class="d-flex gap-1">
             <button type="button" class="btn btn-sm btn-light" data-act="copy">复制</button>
             <button type="button" class="btn btn-sm btn-light" data-act="edit">编辑</button>
+            <button type="button" class="btn btn-sm btn-light" data-act="delete">删除</button>
           </div>
         </div>
         <div class="preview markdown">${body}</div>
@@ -328,24 +331,40 @@ async function savePrompt() {
   showToast("已保存");
 }
 
+async function removePrompt(prompt) {
+  const preview = (prompt.content || "").slice(0, 40).replace(/\s+/g, " ");
+  if (!confirm(`确定删除这条提示词？\n\n${preview}…`)) return false;
+
+  try {
+    await api(`/api/prompts/${encodeURIComponent(prompt.id)}`, { method: "DELETE" });
+  } catch (error) {
+    showToast("删除失败：" + error.message);
+    return false;
+  }
+
+  state.prompts = state.prompts.filter((item) => item.id !== prompt.id);
+  render();
+  showToast("已删除");
+  return true;
+}
+
 async function deletePrompt() {
   const editing = state.editing;
   if (!editing?.original) return;
-  const preview = (editing.original.content || "").slice(0, 40).replace(/\s+/g, " ");
-  if (!confirm(`确定删除这条提示词？\n\n${preview}…`)) return;
-
-  try {
-    await api(`/api/prompts/${encodeURIComponent(editing.id)}`, { method: "DELETE" });
-  } catch (error) {
-    showToast("删除失败：" + error.message);
-    return;
-  }
-
-  state.prompts = state.prompts.filter((item) => item.id !== editing.id);
+  const removed = await removePrompt(editing.original);
+  if (!removed) return;
   editorModal.hide();
   state.editing = null;
-  render();
-  showToast("已删除");
+}
+
+function openDetail(prompt) {
+  state.detailTarget = prompt;
+  el("detail-category").textContent = categoryOf(prompt);
+  el("detail-usage").textContent = `用过 ${prompt.usageCount || 0} 次`;
+  el("detail-body").innerHTML = prompt.content
+    ? renderMarkdown(prompt.content)
+    : '<p class="text-secondary mb-0">（空提示词）</p>';
+  detailModal.show();
 }
 
 /* ---------------- history ---------------- */
@@ -444,12 +463,22 @@ function bindEvents() {
       return;
     }
 
+    if (action === "copy") {
+      copyPrompt(prompt);
+      return;
+    }
+
     if (action === "edit") {
       openEditor(prompt);
       return;
     }
 
-    copyPrompt(prompt);
+    if (action === "delete") {
+      removePrompt(prompt);
+      return;
+    }
+
+    openDetail(prompt);
   });
 
   el("search").addEventListener("input", (event) => {
@@ -463,7 +492,7 @@ function bindEvents() {
     const list = visiblePrompts();
     if (list.length) {
       event.preventDefault();
-      copyPrompt(list[0]);
+      openDetail(list[0]);
     }
   });
 
@@ -486,6 +515,23 @@ function bindEvents() {
     historyModal.hide();
     showToast("已载入历史版本，保存后生效");
   });
+
+  el("detail-copy").addEventListener("click", () => {
+    if (state.detailTarget) copyPrompt(state.detailTarget);
+  });
+  el("detail-edit").addEventListener("click", () => {
+    const prompt = state.detailTarget;
+    if (!prompt) return;
+    detailModal.hide();
+    openEditor(prompt);
+  });
+  el("detail-delete").addEventListener("click", async () => {
+    const prompt = state.detailTarget;
+    if (!prompt) return;
+    const removed = await removePrompt(prompt);
+    if (removed) detailModal.hide();
+  });
+  el("detail-modal").addEventListener("hidden.bs.modal", () => { state.detailTarget = null; });
 
   el("editor-modal").addEventListener("shown.bs.modal", () => el("f-content").focus());
   el("editor-modal").addEventListener("hidden.bs.modal", () => { state.editing = null; });
@@ -515,6 +561,7 @@ function bindEvents() {
     const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
     const editorOpen = el("editor-modal").classList.contains("show");
     const historyOpen = el("history-modal").classList.contains("show");
+    const detailOpen = el("detail-modal").classList.contains("show");
 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
       if (editorOpen) {
@@ -531,7 +578,7 @@ function bindEvents() {
       return;
     }
 
-    if (typing || editorOpen || historyOpen) return;
+    if (typing || editorOpen || historyOpen || detailOpen) return;
     if (el("app").classList.contains("d-none")) return;
 
     if (event.key === "/") {
@@ -550,7 +597,7 @@ function bindEvents() {
       const list = visiblePrompts();
       if (state.activeIndex >= 0 && list[state.activeIndex]) {
         event.preventDefault();
-        copyPrompt(list[state.activeIndex]);
+        openDetail(list[state.activeIndex]);
       }
     }
   });

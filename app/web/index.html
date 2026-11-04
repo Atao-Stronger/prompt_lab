@@ -108,6 +108,31 @@
     </div>
   </div>
 
+  <!-- 详情 -->
+  <div class="modal fade" id="detail-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="d-flex align-items-center gap-2">
+            <span id="detail-category" class="badge rounded-pill text-bg-light fw-normal"></span>
+            <span id="detail-usage" class="text-secondary small"></span>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <div id="detail-body" class="markdown"></div>
+        </div>
+        <div class="modal-footer justify-content-between">
+          <button id="detail-delete" class="btn btn-outline-danger">删除</button>
+          <div>
+            <button id="detail-edit" class="btn btn-light">编辑</button>
+            <button id="detail-copy" class="btn btn-primary ms-2">复制</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-container position-fixed bottom-0 end-0 p-3">
     <div id="toast" class="toast align-items-center text-bg-dark border-0" role="status" aria-live="polite">
       <div class="toast-body" id="toast-body"></div>
