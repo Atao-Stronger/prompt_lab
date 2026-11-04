@@ -94,25 +94,31 @@ body {
   min-width: 0;
 }
 
-/* ---------- waterfall grid ---------- */
+/* ---------- fixed grid ---------- */
 #list {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
-  align-items: flex-start;
 }
-.prompt-column {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+@media (max-width: 1199.98px) {
+  #list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 899.98px) {
+  #list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 599.98px) {
+  #list { grid-template-columns: 1fr; }
 }
 
 /* ---------- cards ---------- */
 .prompt-card {
+  height: 320px;
+  display: flex;
+  flex-direction: column;
   border: 1px solid #e9ecef;
   border-radius: 12px;
   margin: 0;
+  overflow: hidden;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .prompt-card:hover {
@@ -128,6 +134,10 @@ body {
   line-height: 1.45;
 }
 .prompt-card .card-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   padding: 14px 15px;
 }
 .star-btn {
@@ -145,7 +155,8 @@ body {
 
 /* ---------- prompt body ---------- */
 .preview {
-  max-height: 260px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
   position: relative;
   background: #f8f9fb;
@@ -153,7 +164,7 @@ body {
   border-radius: 8px;
   padding: 12px 14px;
 }
-.prompt-card.has-more:not(.expanded) .preview::after {
+.prompt-card.is-clipped .preview::after {
   content: "";
   position: absolute;
   left: 0;
@@ -162,21 +173,6 @@ body {
   height: 44px;
   background: linear-gradient(rgba(248, 249, 251, 0), #f8f9fb);
   pointer-events: none;
-}
-.prompt-card.expanded .preview {
-  max-height: none;
-}
-.more-btn {
-  display: none;
-  border: 0;
-  background: none;
-  color: var(--brand);
-  font-size: 12px;
-  padding: 0;
-  margin-top: 4px;
-}
-.prompt-card.has-more .more-btn {
-  display: inline-block;
 }
 
 /* ---------- markdown ---------- */

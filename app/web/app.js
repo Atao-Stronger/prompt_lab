@@ -2,7 +2,6 @@
 
 const TOKEN_KEY = "promptlab.token";
 const CATEGORY_FALLBACK = "未分类";
-const CARD_MIN_WIDTH = 280;
 
 const state = {
   token: localStorage.getItem(TOKEN_KEY) || "",
@@ -11,7 +10,6 @@ const state = {
   query: "",
   activeIndex: -1,
   editing: null,
-  expanded: new Set(),
 };
 
 const el = (id) => document.getElementById(id);
@@ -155,12 +153,11 @@ function renderSidebar() {
 }
 
 function buildCard(prompt, index) {
-  const expanded = state.expanded.has(prompt.id);
   const body = prompt.content
     ? renderMarkdown(prompt.content)
     : '<p class="text-secondary small mb-0">（空提示词）</p>';
   return `
-    <article class="card prompt-card ${index === state.activeIndex ? "active" : ""} ${expanded ? "expanded" : ""}"
+    <article class="card prompt-card ${index === state.activeIndex ? "active" : ""}"
       data-id="${esc(prompt.id)}" data-index="${index}">
       <div class="card-body">
         <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
@@ -171,18 +168,12 @@ function buildCard(prompt, index) {
           </div>
         </div>
         <div class="preview markdown">${body}</div>
-        <button type="button" class="more-btn" data-act="more">${expanded ? "收起" : "展开"}</button>
         <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
           <span class="badge rounded-pill text-bg-light fw-normal">${esc(categoryOf(prompt))}</span>
           <span class="text-secondary small">用过 ${prompt.usageCount || 0} 次</span>
         </div>
       </div>
     </article>`;
-}
-
-function columnCount() {
-  const width = el("list").clientWidth || 900;
-  return Math.max(1, Math.min(5, Math.floor(width / CARD_MIN_WIDTH)));
 }
 
 function renderList() {
@@ -201,34 +192,15 @@ function renderList() {
   }
   if (state.activeIndex >= list.length) state.activeIndex = list.length - 1;
 
-  const total = Math.min(columnCount(), list.length);
-  const columns = [];
-  el("list").innerHTML = "";
-  for (let i = 0; i < total; i += 1) {
-    const column = document.createElement("div");
-    column.className = "prompt-column";
-    el("list").appendChild(column);
-    columns.push(column);
-  }
-
-  list.forEach((prompt, index) => {
-    const shortest = columns.reduce((a, b) => (a.offsetHeight <= b.offsetHeight ? a : b));
-    shortest.insertAdjacentHTML("beforeend", buildCard(prompt, index));
-  });
-
-  markOverflow();
+  el("list").innerHTML = list.map((prompt, index) => buildCard(prompt, index)).join("");
+  markClipped();
 }
 
-function markOverflow() {
+function markClipped() {
   document.querySelectorAll(".prompt-card").forEach((card) => {
     const preview = card.querySelector(".preview");
     if (!preview) return;
-    card.classList.remove("has-more");
-    if (card.classList.contains("expanded")) {
-      card.classList.add("has-more");
-      return;
-    }
-    if (preview.scrollHeight > preview.clientHeight + 2) card.classList.add("has-more");
+    card.classList.toggle("is-clipped", preview.scrollHeight > preview.clientHeight + 2);
   });
 }
 
@@ -472,16 +444,6 @@ function bindEvents() {
       return;
     }
 
-    if (action === "more") {
-      const isExpanded = state.expanded.has(prompt.id);
-      if (isExpanded) state.expanded.delete(prompt.id);
-      else state.expanded.add(prompt.id);
-      item.classList.toggle("expanded", !isExpanded);
-      const button = item.querySelector(".more-btn");
-      if (button) button.textContent = isExpanded ? "展开" : "收起";
-      return;
-    }
-
     if (action === "edit") {
       openEditor(prompt);
       return;
@@ -545,10 +507,7 @@ function bindEvents() {
   let resizeTimer = null;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      renderList();
-      markOverflow();
-    }, 150);
+    resizeTimer = setTimeout(markClipped, 150);
   });
 
   document.addEventListener("keydown", (event) => {
