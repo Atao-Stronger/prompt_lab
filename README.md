@@ -80,6 +80,10 @@ git push origin main
 - 备份直接拷贝 `/opt/prompt_lab/data/prompt_lab.db` 即可。
 - 修改管理员口令：编辑 `/opt/prompt_lab/.env` 后 `docker compose up -d`。
 
+## 图标
+
+品牌图标基于 Lucide 的 `library-big` 图标（ISC License），文件在 `app/web/logo.svg`，同时用作页面 logo 和 favicon。
+
 ## 安全说明
 
 - 已启用 HTTPS。
