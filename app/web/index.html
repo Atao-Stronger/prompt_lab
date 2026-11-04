@@ -5,93 +5,152 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Prompt 库</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./vendor/bootstrap.min.css" />
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <div id="login" class="login hidden">
-    <form id="login-form" class="login-card">
-      <h1>Prompt 库</h1>
-      <p class="muted">输入访问口令进入</p>
-      <input id="login-token" type="password" placeholder="访问口令" autocomplete="current-password" />
-      <button type="submit" class="btn primary block">进入</button>
-      <p id="login-error" class="error"></p>
-    </form>
+  <div id="login" class="login-wrap d-none">
+    <div class="card login-card border-0 shadow-sm">
+      <div class="card-body p-4 p-md-5">
+        <div class="brand-mark mb-3">P</div>
+        <h1 class="h4 fw-bold mb-1">Prompt 库</h1>
+        <p class="text-secondary small mb-4">输入访问口令进入</p>
+        <form id="login-form" novalidate>
+          <div class="mb-3">
+            <input id="login-token" type="password" class="form-control form-control-lg"
+              placeholder="访问口令" autocomplete="current-password" />
+          </div>
+          <button class="btn btn-primary btn-lg w-100" type="submit">进入</button>
+          <p id="login-error" class="text-danger small mt-3 mb-0"></p>
+        </form>
+      </div>
+    </div>
   </div>
 
-  <div id="app" class="app hidden">
-    <header class="topbar">
-      <div class="brand">Prompt 库</div>
-      <input id="search" class="search" type="search" placeholder="搜索标题、标签、正文…   按 / 聚焦" autocomplete="off" />
-      <div class="top-actions">
-        <button id="btn-new" class="btn primary" title="新建 (Ctrl+N)">新建</button>
-        <button id="btn-export" class="btn" title="导出 JSON">导出</button>
-        <button id="btn-import" class="btn" title="导入 JSON">导入</button>
-        <button id="btn-logout" class="btn ghost" title="退出">退出</button>
-        <input id="file-import" type="file" accept="application/json,.json" hidden />
-      </div>
-    </header>
-
-    <main class="layout">
-      <aside id="sidebar" class="sidebar"></aside>
-      <section class="content">
-        <div id="list" class="list"></div>
-        <div id="empty" class="empty hidden">
-          <h2>还没有提示词</h2>
-          <p class="muted">按 Ctrl+N 或点右上角「新建」创建第一条。</p>
+  <div id="app" class="d-none">
+    <nav class="navbar bg-white border-bottom sticky-top">
+      <div class="container-fluid flex-nowrap gap-2">
+        <span class="navbar-brand fw-bold mb-0">Prompt 库</span>
+        <input id="search" class="form-control search-input" type="search"
+          placeholder="搜索标题、标签、正文…（按 / 聚焦）" autocomplete="off" />
+        <div class="d-flex align-items-center gap-2">
+          <button id="btn-new" class="btn btn-primary">新建</button>
+          <button id="btn-export" class="btn btn-outline-secondary d-none d-md-inline-block">导出</button>
+          <button id="btn-import" class="btn btn-outline-secondary d-none d-md-inline-block">导入</button>
+          <button id="btn-logout" class="btn btn-link text-secondary text-decoration-none px-2">退出</button>
+          <input id="file-import" type="file" accept="application/json,.json" class="d-none" />
         </div>
-      </section>
-    </main>
-  </div>
-
-  <div id="drawer-mask" class="mask hidden"></div>
-  <aside id="drawer" class="drawer hidden" aria-label="编辑提示词">
-    <div class="drawer-head">
-      <h2 id="drawer-title">新建提示词</h2>
-      <button id="drawer-close" class="icon-btn" title="关闭 (Esc)">×</button>
-    </div>
-    <div class="drawer-body">
-      <label>标题<input id="f-title" maxlength="200" /></label>
-      <label>说明<input id="f-desc" maxlength="200" placeholder="一句话用途，可留空" /></label>
-      <div class="row">
-        <label>分类<select id="f-category"></select></label>
-        <label class="grow">标签<input id="f-tags" placeholder="逗号分隔，如 review, Python" /></label>
       </div>
-      <label>正文<textarea id="f-content" rows="14" placeholder="支持 {{变量}} 占位符"></textarea></label>
-      <div id="f-vars" class="vars muted"></div>
-      <label id="f-note-wrap" class="hidden">本次修改说明<input id="f-note" placeholder="可选，写入版本记录" /></label>
-    </div>
-    <div class="drawer-foot">
-      <button id="btn-delete" class="btn danger">删除</button>
-      <div class="spacer"></div>
-      <button id="btn-history" class="btn">历史</button>
-      <button id="btn-save" class="btn primary">保存 (Ctrl+S)</button>
-    </div>
-  </aside>
+    </nav>
 
-  <div id="copy-mask" class="mask hidden"></div>
-  <div id="copy-modal" class="modal hidden" role="dialog" aria-modal="true">
-    <h2 id="copy-title"></h2>
-    <div id="copy-fields" class="fields"></div>
-    <div class="modal-foot">
-      <span class="muted small">Ctrl+Enter 复制</span>
-      <div class="spacer"></div>
-      <button id="copy-cancel" class="btn">取消</button>
-      <button id="copy-confirm" class="btn primary">复制</button>
+    <div class="layout">
+      <aside class="sidebar border-end bg-white">
+        <div id="sidebar" class="list-group list-group-flush"></div>
+      </aside>
+      <main class="content">
+        <div id="list" class="prompt-list"></div>
+        <div id="empty" class="empty-state d-none">
+          <h2 class="h5">还没有提示词</h2>
+          <p class="text-secondary small mb-0">按 Ctrl+N 或点右上角「新建」创建第一条。</p>
+        </div>
+      </main>
     </div>
   </div>
 
-  <div id="history-mask" class="mask hidden"></div>
-  <div id="history-modal" class="modal wide hidden" role="dialog" aria-modal="true">
-    <h2>历史版本</h2>
-    <div id="history-list" class="history-list"></div>
-    <div class="modal-foot">
-      <div class="spacer"></div>
-      <button id="history-close" class="btn">关闭</button>
+  <!-- 编辑 / 新建 -->
+  <div class="modal fade" id="editor-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="editor-title">新建提示词</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">标题</label>
+            <input id="f-title" class="form-control" maxlength="200" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">说明 <span class="text-secondary fw-normal small">可选</span></label>
+            <input id="f-desc" class="form-control" maxlength="200" placeholder="一句话用途" />
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-5">
+              <label class="form-label">分类</label>
+              <select id="f-category" class="form-select"></select>
+            </div>
+            <div class="col-md-7">
+              <label class="form-label">标签</label>
+              <input id="f-tags" class="form-control" placeholder="逗号分隔，如 review, Python" />
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">正文</label>
+            <textarea id="f-content" class="form-control code-input" rows="12"
+              placeholder="支持 {{变量}} 占位符"></textarea>
+          </div>
+          <div id="f-vars" class="form-text mb-3"></div>
+          <div id="f-note-wrap" class="d-none">
+            <label class="form-label">本次修改说明 <span class="text-secondary fw-normal small">可选</span></label>
+            <input id="f-note" class="form-control" placeholder="写入版本记录" />
+          </div>
+        </div>
+        <div class="modal-footer justify-content-between">
+          <div>
+            <button id="btn-delete" class="btn btn-outline-danger">删除</button>
+            <button id="btn-history" class="btn btn-outline-secondary ms-2">历史</button>
+          </div>
+          <div>
+            <button class="btn btn-light" data-bs-dismiss="modal">取消</button>
+            <button id="btn-save" class="btn btn-primary ms-2">保存</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div id="toast" class="toast hidden"></div>
+  <!-- 复制 -->
+  <div class="modal fade" id="copy-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="copy-title"></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <div id="copy-fields"></div>
+        </div>
+        <div class="modal-footer">
+          <span class="text-secondary small me-auto">Ctrl+Enter 复制</span>
+          <button class="btn btn-light" data-bs-dismiss="modal">取消</button>
+          <button id="copy-confirm" class="btn btn-primary ms-2">复制</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-  <script src="./app.js" defer></script>
+  <!-- 历史 -->
+  <div class="modal fade" id="history-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">历史版本</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <div id="history-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="toast" class="toast align-items-center text-bg-dark border-0" role="status" aria-live="polite">
+      <div class="toast-body" id="toast-body"></div>
+    </div>
+  </div>
+
+  <script src="./vendor/bootstrap.bundle.min.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>

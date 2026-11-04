@@ -22,6 +22,11 @@ const state = {
 
 const el = (id) => document.getElementById(id);
 
+const editorModal = new bootstrap.Modal(el("editor-modal"));
+const copyModal = new bootstrap.Modal(el("copy-modal"));
+const historyModal = new bootstrap.Modal(el("history-modal"));
+const toastInstance = new bootstrap.Toast(el("toast"), { delay: 1800 });
+
 function esc(value) {
   return String(value).replace(/[&<>"']/g, (ch) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -124,17 +129,18 @@ function renderSidebar() {
   const counts = {};
   for (const prompt of state.prompts) counts[prompt.category] = (counts[prompt.category] || 0) + 1;
 
-  const kindButton = (kind, label, count) => `
-    <button class="side-item ${state.view.kind === kind && !state.view.category ? "active" : ""}"
-      data-kind="${kind}">${label}<span>${count}</span></button>`;
+  const item = (attrs, label, count, active) => `
+    <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center ${active ? "active" : ""}" ${attrs}>
+      <span>${label}</span>
+      <span class="badge rounded-pill text-bg-light">${count}</span>
+    </button>`;
 
-  let html = kindButton("all", "全部", total)
-    + kindButton("fav", "收藏", favorites)
-    + kindButton("recent", "最近使用", recent);
-  html += '<div class="side-title">分类</div>';
+  let html = item('data-kind="all"', "全部", total, state.view.kind === "all" && !state.view.category)
+    + item('data-kind="fav"', "收藏", favorites, state.view.kind === "fav")
+    + item('data-kind="recent"', "最近使用", recent, state.view.kind === "recent");
+  html += '<div class="side-label">分类</div>';
   for (const category of CATEGORIES) {
-    html += `<button class="side-item ${state.view.category === category ? "active" : ""}"
-      data-category="${esc(category)}">${esc(category)}<span>${counts[category] || 0}</span></button>`;
+    html += item(`data-category="${esc(category)}"`, esc(category), counts[category] || 0, state.view.category === category);
   }
   el("sidebar").innerHTML = html;
 }
@@ -144,40 +150,46 @@ function renderList() {
 
   if (!state.prompts.length) {
     el("list").innerHTML = "";
-    el("empty").classList.remove("hidden");
+    el("empty").classList.remove("d-none");
     return;
   }
-  el("empty").classList.add("hidden");
+  el("empty").classList.add("d-none");
 
   if (!list.length) {
-    el("list").innerHTML = '<p class="muted" style="padding:40px 4px">没有匹配的提示词</p>';
+    el("list").innerHTML = '<p class="text-secondary text-center py-5 mb-0">没有匹配的提示词</p>';
     return;
   }
   if (state.activeIndex >= list.length) state.activeIndex = list.length - 1;
 
   el("list").innerHTML = list.map((prompt, index) => {
-    const tags = (prompt.tags || []).map((tag) => `<span class="tag">${esc(tag)}</span>`).join("");
+    const tags = (prompt.tags || [])
+      .map((tag) => `<span class="badge rounded-pill text-bg-light fw-normal">${esc(tag)}</span>`)
+      .join(" ");
     const expanded = state.expanded.has(prompt.id);
     return `
-      <article class="item ${index === state.activeIndex ? "active" : ""} ${expanded ? "expanded" : ""}"
+      <article class="card prompt-card mb-3 ${index === state.activeIndex ? "active" : ""} ${expanded ? "expanded" : ""}"
         data-id="${esc(prompt.id)}" data-index="${index}">
-        <button class="star ${prompt.favorite ? "on" : ""}" data-act="star" title="收藏">★</button>
-        <div class="item-main">
-          <h3>${esc(prompt.title)}</h3>
-          ${prompt.description ? `<p class="desc">${esc(prompt.description)}</p>` : ""}
-          ${prompt.content ? `<div class="preview-box">
-            <div class="preview">${esc(prompt.content)}</div>
-            <button class="more" data-act="more">${expanded ? "收起" : "展开"}</button>
-          </div>` : ""}
-          <div class="meta">
-            ${tags}
-            <span class="dim">${esc(prompt.category || "未分类")}</span>
-            <span class="dim">用过 ${prompt.usageCount || 0} 次</span>
+        <div class="card-body">
+          <div class="d-flex gap-2 align-items-start">
+            <button type="button" class="star-btn ${prompt.favorite ? "on" : ""}" data-act="star" title="收藏">★</button>
+            <div class="flex-grow-1 min-w-0">
+              <h5 class="card-title mb-1">${esc(prompt.title)}</h5>
+              ${prompt.description ? `<p class="text-secondary small mb-2">${esc(prompt.description)}</p>` : ""}
+              ${prompt.content ? `<div class="mb-2">
+                <div class="preview">${esc(prompt.content)}</div>
+                <button type="button" class="more-btn" data-act="more">${expanded ? "收起" : "展开"}</button>
+              </div>` : ""}
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                ${tags}
+                <span class="text-secondary small">${esc(prompt.category || "未分类")}</span>
+                <span class="text-secondary small">用过 ${prompt.usageCount || 0} 次</span>
+              </div>
+            </div>
+            <div class="d-flex flex-column flex-sm-row gap-1 align-items-start">
+              <button type="button" class="btn btn-sm btn-light" data-act="copy">复制</button>
+              <button type="button" class="btn btn-sm btn-light" data-act="edit">编辑</button>
+            </div>
           </div>
-        </div>
-        <div class="item-actions">
-          <button class="icon" data-act="copy" title="复制">⧉</button>
-          <button class="icon" data-act="edit" title="编辑">✎</button>
         </div>
       </article>`;
   }).join("");
@@ -186,12 +198,12 @@ function renderList() {
 }
 
 function markOverflow() {
-  document.querySelectorAll(".item").forEach((item) => {
-    const preview = item.querySelector(".preview");
+  document.querySelectorAll(".prompt-card").forEach((card) => {
+    const preview = card.querySelector(".preview");
     if (!preview) return;
-    item.classList.remove("has-more");
-    if (item.classList.contains("expanded")) {
-      item.classList.add("has-more");
+    card.classList.remove("has-more");
+    if (card.classList.contains("expanded")) {
+      card.classList.add("has-more");
       return;
     }
     const clampedHeight = preview.clientHeight;
@@ -200,46 +212,15 @@ function markOverflow() {
     const fullHeight = preview.scrollHeight;
     preview.style.display = "";
     preview.style.webkitLineClamp = "";
-    if (fullHeight > clampedHeight + 2) item.classList.add("has-more");
+    if (fullHeight > clampedHeight + 2) card.classList.add("has-more");
   });
 }
 
-/* ---------------- overlays ---------------- */
+/* ---------------- toast ---------------- */
 
-const OVERLAYS = {
-  drawer: ["drawer", "drawer-mask"],
-  copy: ["copy-modal", "copy-mask"],
-  history: ["history-modal", "history-mask"],
-};
-
-function show(name) {
-  const [panel, mask] = OVERLAYS[name];
-  el(panel).classList.remove("hidden");
-  el(mask).classList.remove("hidden");
-}
-
-function hide(name) {
-  const [panel, mask] = OVERLAYS[name];
-  el(panel).classList.add("hidden");
-  el(mask).classList.add("hidden");
-}
-
-function closeTopLayer() {
-  if (!el("history-modal").classList.contains("hidden")) return hide("history");
-  if (!el("copy-modal").classList.contains("hidden")) return hide("copy");
-  if (!el("drawer").classList.contains("hidden")) {
-    hide("drawer");
-    state.editing = null;
-  }
-}
-
-let toastTimer = null;
-function toast(message) {
-  const node = el("toast");
-  node.textContent = message;
-  node.classList.remove("hidden");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => node.classList.add("hidden"), 1800);
+function showToast(message) {
+  el("toast-body").textContent = message;
+  toastInstance.show();
 }
 
 /* ---------------- clipboard ---------------- */
@@ -299,22 +280,21 @@ function openCopy(prompt) {
   const saved = readSavedVars(prompt.id);
 
   if (!names.length) {
-    fields.innerHTML = '<p class="muted">这条提示词没有变量，直接复制即可。</p>';
+    fields.innerHTML = '<p class="text-secondary mb-0">这条提示词没有变量，直接复制即可。</p>';
   } else {
     fields.innerHTML = names.map((name) => `
-      <label>
-        <span>${esc(name)}</span>
-        <textarea data-var="${esc(name)}" rows="1"
+      <div class="mb-3">
+        <label class="form-label small fw-semibold text-primary">{{${esc(name)}}}</label>
+        <textarea class="form-control code-input" data-var="${esc(name)}" rows="1"
           placeholder="填入 ${esc(name)}">${esc(saved[name] || "")}</textarea>
-      </label>`).join("");
+      </div>`).join("");
     fields.querySelectorAll("textarea").forEach((node) => {
       autoGrow(node);
       node.addEventListener("input", () => autoGrow(node));
     });
   }
 
-  show("copy");
-  setTimeout(() => fields.querySelector("textarea")?.focus(), 40);
+  copyModal.show();
 }
 
 async function confirmCopy() {
@@ -331,7 +311,7 @@ async function confirmCopy() {
 
   const ok = await copyToClipboard(text);
   if (!ok) {
-    toast("复制失败，请手动选中文本");
+    showToast("复制失败，请手动选中文本");
     return;
   }
 
@@ -339,15 +319,14 @@ async function confirmCopy() {
   prompt.usageCount = (prompt.usageCount || 0) + 1;
   prompt.lastUsedAt = new Date().toISOString();
 
-  hide("copy");
-  state.copyTarget = null;
-  toast("已复制");
+  copyModal.hide();
+  showToast("已复制");
   render();
 
   api(`/api/prompts/${encodeURIComponent(prompt.id)}`, {
     method: "PUT",
     body: JSON.stringify(prompt),
-  }).catch(() => toast("已复制，但使用次数同步失败"));
+  }).catch(() => showToast("已复制，但使用次数同步失败"));
 }
 
 /* ---------------- editor ---------------- */
@@ -355,7 +334,7 @@ async function confirmCopy() {
 function updateVarsHint() {
   const names = varsOf(el("f-content").value);
   el("f-vars").innerHTML = names.length
-    ? "识别到变量：" + names.map((name) => `<code>{{${esc(name)}}}</code>`).join("")
+    ? "识别到变量：" + names.map((name) => `<span class="var-chip">{{${esc(name)}}}</span>`).join("")
     : "正文里写 {{变量名}} 即可在复制时自动生成输入框";
 }
 
@@ -364,20 +343,19 @@ function openEditor(prompt) {
     ? { id: prompt.id, original: JSON.parse(JSON.stringify(prompt)) }
     : { id: newId(), original: null };
 
-  el("drawer-title").textContent = prompt ? "编辑提示词" : "新建提示词";
+  el("editor-title").textContent = prompt ? "编辑提示词" : "新建提示词";
   el("f-title").value = prompt?.title || "";
   el("f-desc").value = prompt?.description || "";
   el("f-category").value = prompt?.category || "代码实现";
   el("f-tags").value = (prompt?.tags || []).join(", ");
   el("f-content").value = prompt?.content || "";
   el("f-note").value = "";
-  el("f-note-wrap").classList.toggle("hidden", !prompt);
-  el("btn-delete").classList.toggle("hidden", !prompt);
-  el("btn-history").classList.toggle("hidden", !prompt);
+  el("f-note-wrap").classList.toggle("d-none", !prompt);
+  el("btn-delete").classList.toggle("d-none", !prompt);
+  el("btn-history").classList.toggle("d-none", !prompt);
   updateVarsHint();
 
-  show("drawer");
-  setTimeout(() => el("f-title").focus(), 40);
+  editorModal.show();
 }
 
 async function savePrompt() {
@@ -386,7 +364,7 @@ async function savePrompt() {
 
   const title = el("f-title").value.trim();
   if (!title) {
-    toast("标题不能为空");
+    showToast("标题不能为空");
     el("f-title").focus();
     return;
   }
@@ -426,7 +404,7 @@ async function savePrompt() {
       body: JSON.stringify(prompt),
     });
   } catch (error) {
-    toast("保存失败：" + error.message);
+    showToast("保存失败：" + error.message);
     return;
   }
 
@@ -434,10 +412,10 @@ async function savePrompt() {
   if (index >= 0) state.prompts[index] = prompt;
   else state.prompts.push(prompt);
 
-  hide("drawer");
+  editorModal.hide();
   state.editing = null;
   render();
-  toast("已保存");
+  showToast("已保存");
 }
 
 async function deletePrompt() {
@@ -448,15 +426,15 @@ async function deletePrompt() {
   try {
     await api(`/api/prompts/${encodeURIComponent(editing.id)}`, { method: "DELETE" });
   } catch (error) {
-    toast("删除失败：" + error.message);
+    showToast("删除失败：" + error.message);
     return;
   }
 
   state.prompts = state.prompts.filter((item) => item.id !== editing.id);
-  hide("drawer");
+  editorModal.hide();
   state.editing = null;
   render();
-  toast("已删除");
+  showToast("已删除");
 }
 
 /* ---------------- history ---------------- */
@@ -469,28 +447,17 @@ function openHistory() {
   el("history-list").innerHTML = versions.length
     ? versions.map((version, index) => `
       <div class="history-item">
-        <div class="history-head">
-          <strong>版本 ${version.v}</strong>
-          <span class="muted small">${esc(version.savedAt || "")}</span>
-          ${version.note ? `<span class="tag">${esc(version.note)}</span>` : ""}
-          <div class="spacer"></div>
-          <button class="btn" data-restore="${index}">载入此版本</button>
+        <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+          <strong class="small">版本 ${version.v}</strong>
+          <span class="text-secondary small">${esc(version.savedAt || "")}</span>
+          ${version.note ? `<span class="badge rounded-pill text-bg-light fw-normal">${esc(version.note)}</span>` : ""}
+          <button type="button" class="btn btn-sm btn-outline-primary ms-auto" data-restore="${index}">载入</button>
         </div>
         <pre class="history-body">${esc(version.content || "")}</pre>
       </div>`).join("")
-    : '<p class="muted">还没有历史版本。修改正文并保存后会自动生成。</p>';
+    : '<p class="text-secondary mb-0">还没有历史版本。修改正文并保存后会自动生成。</p>';
 
-  el("history-list").onclick = (event) => {
-    const button = event.target.closest("[data-restore]");
-    if (!button) return;
-    const version = versions[Number(button.dataset.restore)];
-    el("f-content").value = version.content || "";
-    updateVarsHint();
-    hide("history");
-    toast("已载入历史版本，保存后生效");
-  };
-
-  show("history");
+  historyModal.show();
 }
 
 /* ---------------- import / export ---------------- */
@@ -522,9 +489,9 @@ async function importFile(file) {
       body: JSON.stringify({ prompts: incoming, mode: "merge" }),
     });
     await load();
-    toast(`已导入 ${incoming.length} 条`);
+    showToast(`已导入 ${incoming.length} 条`);
   } catch (error) {
-    toast("导入失败：" + error.message);
+    showToast("导入失败：" + error.message);
   }
 }
 
@@ -537,15 +504,15 @@ async function load() {
 }
 
 function showLogin(message = "") {
-  el("app").classList.add("hidden");
-  el("login").classList.remove("hidden");
+  el("app").classList.add("d-none");
+  el("login").classList.remove("d-none");
   el("login-error").textContent = message;
-  setTimeout(() => el("login-token").focus(), 30);
+  setTimeout(() => el("login-token").focus(), 50);
 }
 
 async function enterApp() {
-  el("login").classList.add("hidden");
-  el("app").classList.remove("hidden");
+  el("login").classList.add("d-none");
+  el("app").classList.remove("d-none");
   await load();
 }
 
@@ -564,7 +531,7 @@ function moveActive(delta) {
   if (!list.length) return;
   state.activeIndex = Math.max(0, Math.min(list.length - 1, state.activeIndex + delta));
   renderList();
-  document.querySelector(`.item[data-index="${state.activeIndex}"]`)
+  document.querySelector(`.prompt-card[data-index="${state.activeIndex}"]`)
     ?.scrollIntoView({ block: "nearest" });
 }
 
@@ -575,14 +542,15 @@ function bindEvents() {
     if (button.dataset.kind) {
       state.view = { kind: button.dataset.kind, category: null };
     } else if (button.dataset.category) {
-      state.view = { kind: "all", category: button.dataset.category };
+      const same = state.view.category === button.dataset.category;
+      state.view = { kind: "all", category: same ? null : button.dataset.category };
     }
     state.activeIndex = -1;
     render();
   });
 
   el("list").addEventListener("click", (event) => {
-    const item = event.target.closest(".item");
+    const item = event.target.closest(".prompt-card");
     if (!item) return;
     const prompt = state.prompts.find((entry) => entry.id === item.dataset.id);
     if (!prompt) return;
@@ -596,22 +564,25 @@ function bindEvents() {
       api(`/api/prompts/${encodeURIComponent(prompt.id)}`, {
         method: "PUT",
         body: JSON.stringify(prompt),
-      }).catch(() => toast("收藏状态同步失败"));
+      }).catch(() => showToast("收藏状态同步失败"));
       return;
     }
+
     if (action === "more") {
       const isExpanded = state.expanded.has(prompt.id);
       if (isExpanded) state.expanded.delete(prompt.id);
       else state.expanded.add(prompt.id);
       item.classList.toggle("expanded", !isExpanded);
-      const button = item.querySelector(".more");
+      const button = item.querySelector(".more-btn");
       if (button) button.textContent = isExpanded ? "展开" : "收起";
       return;
     }
+
     if (action === "edit") {
       openEditor(prompt);
       return;
     }
+
     openCopy(prompt);
   });
 
@@ -640,25 +611,32 @@ function bindEvents() {
     event.target.value = "";
   });
 
-  el("drawer-close").addEventListener("click", () => {
-    hide("drawer");
-    state.editing = null;
-  });
   el("btn-save").addEventListener("click", savePrompt);
   el("btn-delete").addEventListener("click", deletePrompt);
   el("btn-history").addEventListener("click", openHistory);
   el("f-content").addEventListener("input", updateVarsHint);
-
-  el("copy-cancel").addEventListener("click", () => hide("copy"));
   el("copy-confirm").addEventListener("click", confirmCopy);
-  el("history-close").addEventListener("click", () => hide("history"));
 
-  el("drawer-mask").addEventListener("click", () => {
-    hide("drawer");
-    state.editing = null;
+  el("history-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-restore]");
+    if (!button) return;
+    const original = state.editing?.original;
+    if (!original) return;
+    const versions = [...(original.versions || [])].sort((a, b) => (b.v || 0) - (a.v || 0));
+    const version = versions[Number(button.dataset.restore)];
+    if (!version) return;
+    el("f-content").value = version.content || "";
+    updateVarsHint();
+    historyModal.hide();
+    showToast("已载入历史版本，保存后生效");
   });
-  el("copy-mask").addEventListener("click", () => hide("copy"));
-  el("history-mask").addEventListener("click", () => hide("history"));
+
+  el("editor-modal").addEventListener("shown.bs.modal", () => el("f-title").focus());
+  el("editor-modal").addEventListener("hidden.bs.modal", () => { state.editing = null; });
+  el("copy-modal").addEventListener("shown.bs.modal", () => {
+    el("copy-fields").querySelector("textarea")?.focus();
+  });
+  el("copy-modal").addEventListener("hidden.bs.modal", () => { state.copyTarget = null; });
 
   el("login-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -680,17 +658,15 @@ function bindEvents() {
     resizeTimer = setTimeout(markOverflow, 150);
   });
 
-  document.addEventListener("keydown", (event) => {    const tag = document.activeElement?.tagName;
+  document.addEventListener("keydown", (event) => {
+    const tag = document.activeElement?.tagName;
     const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-    const copyOpen = !el("copy-modal").classList.contains("hidden");
-
-    if (event.key === "Escape") {
-      closeTopLayer();
-      return;
-    }
+    const editorOpen = el("editor-modal").classList.contains("show");
+    const copyOpen = el("copy-modal").classList.contains("show");
+    const historyOpen = el("history-modal").classList.contains("show");
 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-      if (!el("drawer").classList.contains("hidden")) {
+      if (editorOpen) {
         event.preventDefault();
         savePrompt();
       }
@@ -703,7 +679,15 @@ function bindEvents() {
       return;
     }
 
-    if (typing || el("app").classList.contains("hidden")) return;
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n"
+      && !editorOpen && !copyOpen && !historyOpen) {
+      event.preventDefault();
+      openEditor(null);
+      return;
+    }
+
+    if (typing || editorOpen || copyOpen || historyOpen) return;
+    if (el("app").classList.contains("d-none")) return;
 
     if (event.key === "/") {
       event.preventDefault();
