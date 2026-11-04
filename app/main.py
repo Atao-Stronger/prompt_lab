@@ -97,7 +97,7 @@ class Prompt(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     content: str
     description: str = ""
-    category: str = "代码实现"
+    category: str = "未分类"
     tags: list[str] = Field(default_factory=list)
     favorite: bool = False
     usageCount: int = 0
@@ -105,11 +105,6 @@ class Prompt(BaseModel):
     createdAt: str
     updatedAt: str
     versions: list[dict] = Field(default_factory=list)
-
-
-class ImportPayload(BaseModel):
-    prompts: list[Prompt]
-    mode: str = "merge"
 
 
 def upsert(conn: sqlite3.Connection, prompt: Prompt) -> None:
@@ -154,18 +149,6 @@ def delete_prompt(prompt_id: str) -> dict:
     conn.commit()
     conn.close()
     return {"ok": True}
-
-
-@app.post("/api/import", dependencies=[Depends(require_token)])
-def import_prompts(payload: ImportPayload) -> dict:
-    conn = connect()
-    if payload.mode == "replace":
-        conn.execute("DELETE FROM prompts")
-    for prompt in payload.prompts:
-        upsert(conn, prompt)
-    conn.commit()
-    conn.close()
-    return {"ok": True, "count": len(payload.prompts)}
 
 
 app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")

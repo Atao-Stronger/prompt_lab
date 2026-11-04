@@ -1,13 +1,7 @@
 "use strict";
 
-const CATEGORIES = [
-  "需求澄清", "方案设计", "代码实现", "重构优化", "调试排错",
-  "测试", "代码审查", "文档提交", "Agent 规则", "学习解释",
-];
-
 const TOKEN_KEY = "promptlab.token";
-const VARS_KEY = "promptlab.vars";
-const VAR_RE = /\{\{\s*([\w\u4e00-\u9fa5-]+)\s*\}\}/g;
+const CATEGORY_FALLBACK = "未分类";
 
 const state = {
   token: localStorage.getItem(TOKEN_KEY) || "",
@@ -16,14 +10,12 @@ const state = {
   query: "",
   activeIndex: -1,
   editing: null,
-  copyTarget: null,
   expanded: new Set(),
 };
 
 const el = (id) => document.getElementById(id);
 
 const editorModal = new bootstrap.Modal(el("editor-modal"));
-const copyModal = new bootstrap.Modal(el("copy-modal"));
 const historyModal = new bootstrap.Modal(el("history-modal"));
 const toastInstance = new bootstrap.Toast(el("toast"), { delay: 1800 });
 
@@ -35,6 +27,17 @@ function esc(value) {
 
 function newId() {
   return "p_" + Math.random().toString(16).slice(2, 8);
+}
+
+/* ---------------- markdown ---------------- */
+
+function renderMarkdown(text) {
+  if (!text) return "";
+  try {
+    return DOMPurify.sanitize(marked.parse(text, { gfm: true, breaks: true }));
+  } catch (_) {
+    return esc(text);
+  }
 }
 
 /* ---------------- transport ---------------- */
@@ -63,16 +66,17 @@ async function api(path, options = {}) {
 
 /* ---------------- data helpers ---------------- */
 
-function varsOf(content) {
-  const names = [];
-  const seen = new Set();
-  for (const match of content.matchAll(VAR_RE)) {
-    if (!seen.has(match[1])) {
-      seen.add(match[1]);
-      names.push(match[1]);
-    }
+function categoryOf(prompt) {
+  return (prompt.category || "").trim() || CATEGORY_FALLBACK;
+}
+
+function categoriesOf() {
+  const counts = new Map();
+  for (const prompt of state.prompts) {
+    const name = categoryOf(prompt);
+    counts.set(name, (counts.get(name) || 0) + 1);
   }
-  return names;
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh"));
 }
 
 function defaultOrder(list) {
@@ -90,8 +94,7 @@ function score(prompt, terms) {
   for (const term of terms) {
     let hit = 0;
     if (prompt.title.toLowerCase().includes(term)) hit += 3;
-    if ((prompt.description || "").toLowerCase().includes(term)) hit += 2;
-    if ((prompt.tags || []).some((tag) => tag.toLowerCase().includes(term))) hit += 2;
+    if (categoryOf(prompt).toLowerCase().includes(term)) hit += 2;
     if (prompt.content.toLowerCase().includes(term)) hit += 1;
     if (!hit) return 0;
     total += hit;
@@ -104,7 +107,7 @@ function visiblePrompts() {
   let list = state.prompts;
   if (state.view.kind === "fav") list = list.filter((p) => p.favorite);
   if (state.view.kind === "recent") list = list.filter((p) => p.lastUsedAt);
-  if (state.view.category) list = list.filter((p) => p.category === state.view.category);
+  if (state.view.category) list = list.filter((p) => categoryOf(p) === state.view.category);
 
   if (!terms.length) return defaultOrder(list);
 
@@ -126,23 +129,29 @@ function renderSidebar() {
   const total = state.prompts.length;
   const favorites = state.prompts.filter((p) => p.favorite).length;
   const recent = state.prompts.filter((p) => p.lastUsedAt).length;
-  const counts = {};
-  for (const prompt of state.prompts) counts[prompt.category] = (counts[prompt.category] || 0) + 1;
 
   const item = (attrs, label, count, active) => `
     <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center ${active ? "active" : ""}" ${attrs}>
-      <span>${label}</span>
+      <span class="text-truncate me-2">${label}</span>
       <span class="badge rounded-pill text-bg-light">${count}</span>
     </button>`;
 
   let html = item('data-kind="all"', "全部", total, state.view.kind === "all" && !state.view.category)
     + item('data-kind="fav"', "收藏", favorites, state.view.kind === "fav")
     + item('data-kind="recent"', "最近使用", recent, state.view.kind === "recent");
-  html += '<div class="side-label">分类</div>';
-  for (const category of CATEGORIES) {
-    html += item(`data-category="${esc(category)}"`, esc(category), counts[category] || 0, state.view.category === category);
+
+  const categories = categoriesOf();
+  if (categories.length) {
+    html += '<div class="side-label">分类</div>';
+    for (const [name, count] of categories) {
+      html += item(`data-category="${esc(name)}"`, esc(name), count, state.view.category === name);
+    }
   }
   el("sidebar").innerHTML = html;
+
+  el("category-list").innerHTML = categories
+    .map(([name]) => `<option value="${esc(name)}"></option>`)
+    .join("");
 }
 
 function renderList() {
@@ -162,10 +171,8 @@ function renderList() {
   if (state.activeIndex >= list.length) state.activeIndex = list.length - 1;
 
   el("list").innerHTML = list.map((prompt, index) => {
-    const tags = (prompt.tags || [])
-      .map((tag) => `<span class="badge rounded-pill text-bg-light fw-normal">${esc(tag)}</span>`)
-      .join(" ");
     const expanded = state.expanded.has(prompt.id);
+    const body = prompt.content ? renderMarkdown(prompt.content) : "";
     return `
       <article class="card prompt-card mb-3 ${index === state.activeIndex ? "active" : ""} ${expanded ? "expanded" : ""}"
         data-id="${esc(prompt.id)}" data-index="${index}">
@@ -174,14 +181,12 @@ function renderList() {
             <button type="button" class="star-btn ${prompt.favorite ? "on" : ""}" data-act="star" title="收藏">★</button>
             <div class="flex-grow-1 min-w-0">
               <h5 class="card-title mb-1">${esc(prompt.title)}</h5>
-              ${prompt.description ? `<p class="text-secondary small mb-2">${esc(prompt.description)}</p>` : ""}
-              ${prompt.content ? `<div class="mb-2">
-                <div class="preview">${esc(prompt.content)}</div>
+              ${body ? `<div class="mb-2">
+                <div class="preview markdown">${body}</div>
                 <button type="button" class="more-btn" data-act="more">${expanded ? "收起" : "展开"}</button>
               </div>` : ""}
               <div class="d-flex flex-wrap align-items-center gap-2">
-                ${tags}
-                <span class="text-secondary small">${esc(prompt.category || "未分类")}</span>
+                <span class="badge rounded-pill text-bg-light fw-normal">${esc(categoryOf(prompt))}</span>
                 <span class="text-secondary small">用过 ${prompt.usageCount || 0} 次</span>
               </div>
             </div>
@@ -206,13 +211,7 @@ function markOverflow() {
       card.classList.add("has-more");
       return;
     }
-    const clampedHeight = preview.clientHeight;
-    preview.style.display = "block";
-    preview.style.webkitLineClamp = "unset";
-    const fullHeight = preview.scrollHeight;
-    preview.style.display = "";
-    preview.style.webkitLineClamp = "";
-    if (fullHeight > clampedHeight + 2) card.classList.add("has-more");
+    if (preview.scrollHeight > preview.clientHeight + 2) card.classList.add("has-more");
   });
 }
 
@@ -247,96 +246,23 @@ async function copyToClipboard(text) {
   return ok;
 }
 
-/* ---------------- copy flow ---------------- */
-
-function readSavedVars(promptId) {
-  try {
-    const all = JSON.parse(localStorage.getItem(VARS_KEY) || "{}");
-    return all[promptId] || {};
-  } catch (_) {
-    return {};
-  }
-}
-
-function saveVars(promptId, values) {
-  try {
-    const all = JSON.parse(localStorage.getItem(VARS_KEY) || "{}");
-    all[promptId] = values;
-    localStorage.setItem(VARS_KEY, JSON.stringify(all));
-  } catch (_) { /* ignore */ }
-}
-
-function autoGrow(node) {
-  node.style.height = "auto";
-  node.style.height = Math.min(node.scrollHeight, 320) + "px";
-}
-
-function openCopy(prompt) {
-  state.copyTarget = prompt;
-  el("copy-title").textContent = prompt.title;
-
-  const names = varsOf(prompt.content);
-  const fields = el("copy-fields");
-  const saved = readSavedVars(prompt.id);
-
-  if (!names.length) {
-    fields.innerHTML = '<p class="text-secondary mb-0">这条提示词没有变量，直接复制即可。</p>';
-  } else {
-    fields.innerHTML = names.map((name) => `
-      <div class="mb-3">
-        <label class="form-label small fw-semibold text-primary">{{${esc(name)}}}</label>
-        <textarea class="form-control code-input" data-var="${esc(name)}" rows="1"
-          placeholder="填入 ${esc(name)}">${esc(saved[name] || "")}</textarea>
-      </div>`).join("");
-    fields.querySelectorAll("textarea").forEach((node) => {
-      autoGrow(node);
-      node.addEventListener("input", () => autoGrow(node));
-    });
-  }
-
-  copyModal.show();
-}
-
-async function confirmCopy() {
-  const prompt = state.copyTarget;
-  if (!prompt) return;
-
-  const values = {};
-  el("copy-fields").querySelectorAll("[data-var]").forEach((node) => {
-    values[node.dataset.var] = node.value;
-  });
-
-  const text = prompt.content.replace(VAR_RE, (raw, name) =>
-    values[name] && values[name].trim() ? values[name] : raw);
-
-  const ok = await copyToClipboard(text);
+async function copyPrompt(prompt) {
+  const ok = await copyToClipboard(prompt.content || "");
   if (!ok) {
     showToast("复制失败，请手动选中文本");
     return;
   }
-
-  saveVars(prompt.id, values);
   prompt.usageCount = (prompt.usageCount || 0) + 1;
   prompt.lastUsedAt = new Date().toISOString();
-
-  copyModal.hide();
-  showToast("已复制");
   render();
-
+  showToast("已复制");
   api(`/api/prompts/${encodeURIComponent(prompt.id)}`, {
     method: "PUT",
     body: JSON.stringify(prompt),
-  }).catch(() => showToast("已复制，但使用次数同步失败"));
+  }).catch(() => { /* 同步失败不打断使用 */ });
 }
 
 /* ---------------- editor ---------------- */
-
-function updateVarsHint() {
-  const names = varsOf(el("f-content").value);
-  el("f-vars").innerHTML = names.length
-    ? "识别到变量：" + names.map((name) => `<span class="var-chip">{{${esc(name)}}}</span>`).join("")
-    : "正文里写 {{变量名}} 即可在复制时自动生成输入框";
-}
 
 function openEditor(prompt) {
   state.editing = prompt
@@ -345,15 +271,12 @@ function openEditor(prompt) {
 
   el("editor-title").textContent = prompt ? "编辑提示词" : "新建提示词";
   el("f-title").value = prompt?.title || "";
-  el("f-desc").value = prompt?.description || "";
-  el("f-category").value = prompt?.category || "代码实现";
-  el("f-tags").value = (prompt?.tags || []).join(", ");
+  el("f-category").value = prompt?.category || "";
   el("f-content").value = prompt?.content || "";
   el("f-note").value = "";
   el("f-note-wrap").classList.toggle("d-none", !prompt);
   el("btn-delete").classList.toggle("d-none", !prompt);
   el("btn-history").classList.toggle("d-none", !prompt);
-  updateVarsHint();
 
   editorModal.show();
 }
@@ -374,9 +297,9 @@ async function savePrompt() {
   const prompt = {
     id: editing.id,
     title,
-    description: el("f-desc").value.trim(),
-    category: el("f-category").value,
-    tags: el("f-tags").value.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean),
+    description: base ? base.description || "" : "",
+    category: el("f-category").value.trim() || CATEGORY_FALLBACK,
+    tags: base ? [...(base.tags || [])] : [],
     content: el("f-content").value,
     favorite: base ? base.favorite : false,
     usageCount: base ? base.usageCount : 0,
@@ -458,41 +381,6 @@ function openHistory() {
     : '<p class="text-secondary mb-0">还没有历史版本。修改正文并保存后会自动生成。</p>';
 
   historyModal.show();
-}
-
-/* ---------------- import / export ---------------- */
-
-async function exportAll() {
-  const payload = {
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    prompts: state.prompts,
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `prompts-${stamp}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-async function importFile(file) {
-  try {
-    const data = JSON.parse(await file.text());
-    const incoming = Array.isArray(data) ? data : data.prompts;
-    if (!Array.isArray(incoming)) throw new Error("文件里没有 prompts 数组");
-
-    await api("/api/import", {
-      method: "POST",
-      body: JSON.stringify({ prompts: incoming, mode: "merge" }),
-    });
-    await load();
-    showToast(`已导入 ${incoming.length} 条`);
-  } catch (error) {
-    showToast("导入失败：" + error.message);
-  }
 }
 
 /* ---------------- session ---------------- */
@@ -583,7 +471,7 @@ function bindEvents() {
       return;
     }
 
-    openCopy(prompt);
+    copyPrompt(prompt);
   });
 
   el("search").addEventListener("input", (event) => {
@@ -597,25 +485,16 @@ function bindEvents() {
     const list = visiblePrompts();
     if (list.length) {
       event.preventDefault();
-      openCopy(list[0]);
+      copyPrompt(list[0]);
     }
   });
 
   el("btn-new").addEventListener("click", () => openEditor(null));
-  el("btn-export").addEventListener("click", exportAll);
-  el("btn-import").addEventListener("click", () => el("file-import").click());
   el("btn-logout").addEventListener("click", logout);
-  el("file-import").addEventListener("change", (event) => {
-    const file = event.target.files?.[0];
-    if (file) importFile(file);
-    event.target.value = "";
-  });
 
   el("btn-save").addEventListener("click", savePrompt);
   el("btn-delete").addEventListener("click", deletePrompt);
   el("btn-history").addEventListener("click", openHistory);
-  el("f-content").addEventListener("input", updateVarsHint);
-  el("copy-confirm").addEventListener("click", confirmCopy);
 
   el("history-list").addEventListener("click", (event) => {
     const button = event.target.closest("[data-restore]");
@@ -626,17 +505,12 @@ function bindEvents() {
     const version = versions[Number(button.dataset.restore)];
     if (!version) return;
     el("f-content").value = version.content || "";
-    updateVarsHint();
     historyModal.hide();
     showToast("已载入历史版本，保存后生效");
   });
 
   el("editor-modal").addEventListener("shown.bs.modal", () => el("f-title").focus());
   el("editor-modal").addEventListener("hidden.bs.modal", () => { state.editing = null; });
-  el("copy-modal").addEventListener("shown.bs.modal", () => {
-    el("copy-fields").querySelector("textarea")?.focus();
-  });
-  el("copy-modal").addEventListener("hidden.bs.modal", () => { state.copyTarget = null; });
 
   el("login-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -662,7 +536,6 @@ function bindEvents() {
     const tag = document.activeElement?.tagName;
     const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
     const editorOpen = el("editor-modal").classList.contains("show");
-    const copyOpen = el("copy-modal").classList.contains("show");
     const historyOpen = el("history-modal").classList.contains("show");
 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
@@ -673,20 +546,14 @@ function bindEvents() {
       return;
     }
 
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && copyOpen) {
-      event.preventDefault();
-      confirmCopy();
-      return;
-    }
-
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n"
-      && !editorOpen && !copyOpen && !historyOpen) {
+      && !editorOpen && !historyOpen) {
       event.preventDefault();
       openEditor(null);
       return;
     }
 
-    if (typing || editorOpen || copyOpen || historyOpen) return;
+    if (typing || editorOpen || historyOpen) return;
     if (el("app").classList.contains("d-none")) return;
 
     if (event.key === "/") {
@@ -705,14 +572,13 @@ function bindEvents() {
       const list = visiblePrompts();
       if (state.activeIndex >= 0 && list[state.activeIndex]) {
         event.preventDefault();
-        openCopy(list[state.activeIndex]);
+        copyPrompt(list[state.activeIndex]);
       }
     }
   });
 }
 
 async function boot() {
-  el("f-category").innerHTML = CATEGORIES.map((name) => `<option>${esc(name)}</option>`).join("");
   bindEvents();
 
   if (!state.token) {

@@ -32,13 +32,10 @@
       <div class="container-fluid flex-nowrap gap-2">
         <span class="navbar-brand fw-bold mb-0">Prompt 库</span>
         <input id="search" class="form-control search-input" type="search"
-          placeholder="搜索标题、标签、正文…（按 / 聚焦）" autocomplete="off" />
+          placeholder="搜索标题、分类、正文…（按 / 聚焦）" autocomplete="off" />
         <div class="d-flex align-items-center gap-2">
           <button id="btn-new" class="btn btn-primary">新建</button>
-          <button id="btn-export" class="btn btn-outline-secondary d-none d-md-inline-block">导出</button>
-          <button id="btn-import" class="btn btn-outline-secondary d-none d-md-inline-block">导入</button>
           <button id="btn-logout" class="btn btn-link text-secondary text-decoration-none px-2">退出</button>
-          <input id="file-import" type="file" accept="application/json,.json" class="d-none" />
         </div>
       </div>
     </nav>
@@ -71,26 +68,17 @@
             <input id="f-title" class="form-control" maxlength="200" />
           </div>
           <div class="mb-3">
-            <label class="form-label">说明 <span class="text-secondary fw-normal small">可选</span></label>
-            <input id="f-desc" class="form-control" maxlength="200" placeholder="一句话用途" />
-          </div>
-          <div class="row g-3 mb-3">
-            <div class="col-md-5">
-              <label class="form-label">分类</label>
-              <select id="f-category" class="form-select"></select>
-            </div>
-            <div class="col-md-7">
-              <label class="form-label">标签</label>
-              <input id="f-tags" class="form-control" placeholder="逗号分隔，如 review, Python" />
-            </div>
+            <label class="form-label">分类</label>
+            <input id="f-category" class="form-control" list="category-list" maxlength="40"
+              placeholder="选择已有分类，或直接输入新分类" autocomplete="off" />
+            <datalist id="category-list"></datalist>
           </div>
           <div class="mb-2">
-            <label class="form-label">正文</label>
-            <textarea id="f-content" class="form-control code-input" rows="12"
-              placeholder="支持 {{变量}} 占位符"></textarea>
+            <label class="form-label">正文 <span class="text-secondary fw-normal small">支持 Markdown</span></label>
+            <textarea id="f-content" class="form-control code-input" rows="14"
+              placeholder="支持 Markdown：标题、列表、代码块、引用等"></textarea>
           </div>
-          <div id="f-vars" class="form-text mb-3"></div>
-          <div id="f-note-wrap" class="d-none">
+          <div id="f-note-wrap" class="d-none mt-3">
             <label class="form-label">本次修改说明 <span class="text-secondary fw-normal small">可选</span></label>
             <input id="f-note" class="form-control" placeholder="写入版本记录" />
           </div>
@@ -104,26 +92,6 @@
             <button class="btn btn-light" data-bs-dismiss="modal">取消</button>
             <button id="btn-save" class="btn btn-primary ms-2">保存</button>
           </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 复制 -->
-  <div class="modal fade" id="copy-modal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="copy-title"></h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
-        </div>
-        <div class="modal-body">
-          <div id="copy-fields"></div>
-        </div>
-        <div class="modal-footer">
-          <span class="text-secondary small me-auto">Ctrl+Enter 复制</span>
-          <button class="btn btn-light" data-bs-dismiss="modal">取消</button>
-          <button id="copy-confirm" class="btn btn-primary ms-2">复制</button>
         </div>
       </div>
     </div>
@@ -151,6 +119,8 @@
   </div>
 
   <script src="./vendor/bootstrap.bundle.min.js"></script>
+  <script src="./vendor/marked.min.js"></script>
+  <script src="./vendor/purify.min.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
