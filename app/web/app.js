@@ -2,6 +2,7 @@
 
 const TOKEN_KEY = "promptlab.token";
 const CATEGORY_FALLBACK = "未分类";
+const CARD_MIN_WIDTH = 280;
 
 const state = {
   token: localStorage.getItem(TOKEN_KEY) || "",
@@ -93,7 +94,6 @@ function score(prompt, terms) {
   let total = 0;
   for (const term of terms) {
     let hit = 0;
-    if (prompt.title.toLowerCase().includes(term)) hit += 3;
     if (categoryOf(prompt).toLowerCase().includes(term)) hit += 2;
     if (prompt.content.toLowerCase().includes(term)) hit += 1;
     if (!hit) return 0;
@@ -154,6 +154,37 @@ function renderSidebar() {
     .join("");
 }
 
+function buildCard(prompt, index) {
+  const expanded = state.expanded.has(prompt.id);
+  const body = prompt.content
+    ? renderMarkdown(prompt.content)
+    : '<p class="text-secondary small mb-0">（空提示词）</p>';
+  return `
+    <article class="card prompt-card ${index === state.activeIndex ? "active" : ""} ${expanded ? "expanded" : ""}"
+      data-id="${esc(prompt.id)}" data-index="${index}">
+      <div class="card-body">
+        <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+          <button type="button" class="star-btn ${prompt.favorite ? "on" : ""}" data-act="star" title="收藏">★</button>
+          <div class="d-flex gap-1">
+            <button type="button" class="btn btn-sm btn-light" data-act="copy">复制</button>
+            <button type="button" class="btn btn-sm btn-light" data-act="edit">编辑</button>
+          </div>
+        </div>
+        <div class="preview markdown">${body}</div>
+        <button type="button" class="more-btn" data-act="more">${expanded ? "收起" : "展开"}</button>
+        <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+          <span class="badge rounded-pill text-bg-light fw-normal">${esc(categoryOf(prompt))}</span>
+          <span class="text-secondary small">用过 ${prompt.usageCount || 0} 次</span>
+        </div>
+      </div>
+    </article>`;
+}
+
+function columnCount() {
+  const width = el("list").clientWidth || 900;
+  return Math.max(1, Math.min(5, Math.floor(width / CARD_MIN_WIDTH)));
+}
+
 function renderList() {
   const list = visiblePrompts();
 
@@ -170,34 +201,20 @@ function renderList() {
   }
   if (state.activeIndex >= list.length) state.activeIndex = list.length - 1;
 
-  el("list").innerHTML = list.map((prompt, index) => {
-    const expanded = state.expanded.has(prompt.id);
-    const body = prompt.content ? renderMarkdown(prompt.content) : "";
-    return `
-      <article class="card prompt-card mb-3 ${index === state.activeIndex ? "active" : ""} ${expanded ? "expanded" : ""}"
-        data-id="${esc(prompt.id)}" data-index="${index}">
-        <div class="card-body">
-          <div class="d-flex gap-2 align-items-start">
-            <button type="button" class="star-btn ${prompt.favorite ? "on" : ""}" data-act="star" title="收藏">★</button>
-            <div class="flex-grow-1 min-w-0">
-              <h5 class="card-title mb-1">${esc(prompt.title)}</h5>
-              ${body ? `<div class="mb-2">
-                <div class="preview markdown">${body}</div>
-                <button type="button" class="more-btn" data-act="more">${expanded ? "收起" : "展开"}</button>
-              </div>` : ""}
-              <div class="d-flex flex-wrap align-items-center gap-2">
-                <span class="badge rounded-pill text-bg-light fw-normal">${esc(categoryOf(prompt))}</span>
-                <span class="text-secondary small">用过 ${prompt.usageCount || 0} 次</span>
-              </div>
-            </div>
-            <div class="d-flex flex-column flex-sm-row gap-1 align-items-start">
-              <button type="button" class="btn btn-sm btn-light" data-act="copy">复制</button>
-              <button type="button" class="btn btn-sm btn-light" data-act="edit">编辑</button>
-            </div>
-          </div>
-        </div>
-      </article>`;
-  }).join("");
+  const total = Math.min(columnCount(), list.length);
+  const columns = [];
+  el("list").innerHTML = "";
+  for (let i = 0; i < total; i += 1) {
+    const column = document.createElement("div");
+    column.className = "prompt-column";
+    el("list").appendChild(column);
+    columns.push(column);
+  }
+
+  list.forEach((prompt, index) => {
+    const shortest = columns.reduce((a, b) => (a.offsetHeight <= b.offsetHeight ? a : b));
+    shortest.insertAdjacentHTML("beforeend", buildCard(prompt, index));
+  });
 
   markOverflow();
 }
@@ -270,7 +287,6 @@ function openEditor(prompt) {
     : { id: newId(), original: null };
 
   el("editor-title").textContent = prompt ? "编辑提示词" : "新建提示词";
-  el("f-title").value = prompt?.title || "";
   el("f-category").value = prompt?.category || "";
   el("f-content").value = prompt?.content || "";
   el("f-note").value = "";
@@ -285,10 +301,10 @@ async function savePrompt() {
   const editing = state.editing;
   if (!editing) return;
 
-  const title = el("f-title").value.trim();
-  if (!title) {
-    showToast("标题不能为空");
-    el("f-title").focus();
+  const content = el("f-content").value;
+  if (!content.trim()) {
+    showToast("正文不能为空");
+    el("f-content").focus();
     return;
   }
 
@@ -296,11 +312,10 @@ async function savePrompt() {
   const base = editing.original;
   const prompt = {
     id: editing.id,
-    title,
+    content,
     description: base ? base.description || "" : "",
     category: el("f-category").value.trim() || CATEGORY_FALLBACK,
     tags: base ? [...(base.tags || [])] : [],
-    content: el("f-content").value,
     favorite: base ? base.favorite : false,
     usageCount: base ? base.usageCount : 0,
     lastUsedAt: base ? base.lastUsedAt : null,
@@ -344,7 +359,8 @@ async function savePrompt() {
 async function deletePrompt() {
   const editing = state.editing;
   if (!editing?.original) return;
-  if (!confirm(`确定删除「${editing.original.title}」？`)) return;
+  const preview = (editing.original.content || "").slice(0, 40).replace(/\s+/g, " ");
+  if (!confirm(`确定删除这条提示词？\n\n${preview}…`)) return;
 
   try {
     await api(`/api/prompts/${encodeURIComponent(editing.id)}`, { method: "DELETE" });
@@ -509,7 +525,7 @@ function bindEvents() {
     showToast("已载入历史版本，保存后生效");
   });
 
-  el("editor-modal").addEventListener("shown.bs.modal", () => el("f-title").focus());
+  el("editor-modal").addEventListener("shown.bs.modal", () => el("f-content").focus());
   el("editor-modal").addEventListener("hidden.bs.modal", () => { state.editing = null; });
 
   el("login-form").addEventListener("submit", async (event) => {
@@ -529,7 +545,10 @@ function bindEvents() {
   let resizeTimer = null;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(markOverflow, 150);
+    resizeTimer = setTimeout(() => {
+      renderList();
+      markOverflow();
+    }, 150);
   });
 
   document.addEventListener("keydown", (event) => {

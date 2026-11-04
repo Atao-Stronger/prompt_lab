@@ -32,7 +32,7 @@
       <div class="container-fluid flex-nowrap gap-2">
         <span class="navbar-brand fw-bold mb-0">Prompt 库</span>
         <input id="search" class="form-control search-input" type="search"
-          placeholder="搜索标题、分类、正文…（按 / 聚焦）" autocomplete="off" />
+          placeholder="搜索分类、正文…（按 / 聚焦）" autocomplete="off" />
         <div class="d-flex align-items-center gap-2">
           <button id="btn-new" class="btn btn-primary">新建</button>
           <button id="btn-logout" class="btn btn-link text-secondary text-decoration-none px-2">退出</button>
@@ -45,7 +45,7 @@
         <div id="sidebar" class="list-group list-group-flush"></div>
       </aside>
       <main class="content">
-        <div id="list" class="prompt-list"></div>
+        <div id="list"></div>
         <div id="empty" class="empty-state d-none">
           <h2 class="h5">还没有提示词</h2>
           <p class="text-secondary small mb-0">按 Ctrl+N 或点右上角「新建」创建第一条。</p>
@@ -64,10 +64,6 @@
         </div>
         <div class="modal-body">
           <div class="mb-3">
-            <label class="form-label">标题</label>
-            <input id="f-title" class="form-control" maxlength="200" />
-          </div>
-          <div class="mb-3">
             <label class="form-label">分类</label>
             <input id="f-category" class="form-control" list="category-list" maxlength="40"
               placeholder="选择已有分类，或直接输入新分类" autocomplete="off" />
@@ -75,7 +71,7 @@
           </div>
           <div class="mb-2">
             <label class="form-label">正文 <span class="text-secondary fw-normal small">支持 Markdown</span></label>
-            <textarea id="f-content" class="form-control code-input" rows="14"
+            <textarea id="f-content" class="form-control code-input" rows="12"
               placeholder="支持 Markdown：标题、列表、代码块、引用等"></textarea>
           </div>
           <div id="f-note-wrap" class="d-none mt-3">

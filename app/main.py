@@ -94,7 +94,6 @@ def require_token(request: Request, x_auth_token: str = Header(default="")) -> N
 
 class Prompt(BaseModel):
     id: str = Field(min_length=1, max_length=64)
-    title: str = Field(min_length=1, max_length=200)
     content: str
     description: str = ""
     category: str = "未分类"

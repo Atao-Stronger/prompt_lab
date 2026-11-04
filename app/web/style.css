@@ -87,20 +87,32 @@ body {
   padding: 14px 10px 6px;
 }
 .content {
-  padding: 20px 24px 72px;
+  padding: 16px 20px 80px;
   min-width: 0;
 }
 .min-w-0 {
   min-width: 0;
 }
-.prompt-list {
-  max-width: 920px;
+
+/* ---------- waterfall grid ---------- */
+#list {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.prompt-column {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 /* ---------- cards ---------- */
 .prompt-card {
   border: 1px solid #e9ecef;
   border-radius: 12px;
+  margin: 0;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .prompt-card:hover {
@@ -116,7 +128,7 @@ body {
   line-height: 1.45;
 }
 .prompt-card .card-body {
-  padding: 16px 18px;
+  padding: 14px 15px;
 }
 .star-btn {
   border: 0;
@@ -133,12 +145,23 @@ body {
 
 /* ---------- prompt body ---------- */
 .preview {
-  max-height: 340px;
+  max-height: 260px;
   overflow: hidden;
+  position: relative;
   background: #f8f9fb;
   border: 1px solid #eef0f3;
   border-radius: 8px;
   padding: 12px 14px;
+}
+.prompt-card.has-more:not(.expanded) .preview::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 44px;
+  background: linear-gradient(rgba(248, 249, 251, 0), #f8f9fb);
+  pointer-events: none;
 }
 .prompt-card.expanded .preview {
   max-height: none;
