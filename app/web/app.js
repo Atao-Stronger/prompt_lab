@@ -11,6 +11,7 @@ const state = {
   activeIndex: -1,
   editing: null,
   detailTarget: null,
+  isAdmin: false,
 };
 
 const el = (id) => document.getElementById(id);
@@ -18,6 +19,7 @@ const el = (id) => document.getElementById(id);
 const editorModal = new bootstrap.Modal(el("editor-modal"));
 const historyModal = new bootstrap.Modal(el("history-modal"));
 const detailModal = new bootstrap.Modal(el("detail-modal"));
+const loginModal = new bootstrap.Modal(el("login-modal"));
 const toastInstance = new bootstrap.Toast(el("toast"), { delay: 1800 });
 
 function esc(value) {
@@ -163,11 +165,14 @@ function buildCard(prompt, index) {
       data-id="${esc(prompt.id)}" data-index="${index}">
       <div class="card-body">
         <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
-          <button type="button" class="star-btn ${prompt.favorite ? "on" : ""}" data-act="star" title="收藏">★</button>
+          ${state.isAdmin
+            ? `<button type="button" class="star-btn ${prompt.favorite ? "on" : ""}" data-act="star" title="收藏">★</button>`
+            : "<span></span>"}
           <div class="d-flex gap-1">
             <button type="button" class="btn btn-sm btn-light" data-act="copy">复制</button>
+            ${state.isAdmin ? `
             <button type="button" class="btn btn-sm btn-light" data-act="edit">编辑</button>
-            <button type="button" class="btn btn-sm btn-light" data-act="delete">删除</button>
+            <button type="button" class="btn btn-sm btn-light" data-act="delete">删除</button>` : ""}
           </div>
         </div>
         <div class="preview markdown">${body}</div>
@@ -248,9 +253,8 @@ async function copyPrompt(prompt) {
   prompt.lastUsedAt = new Date().toISOString();
   render();
   showToast("已复制");
-  api(`/api/prompts/${encodeURIComponent(prompt.id)}`, {
-    method: "PUT",
-    body: JSON.stringify(prompt),
+  api(`/api/prompts/${encodeURIComponent(prompt.id)}/hit`, {
+    method: "POST",
   }).catch(() => { /* 同步失败不打断使用 */ });
 }
 
@@ -398,25 +402,28 @@ async function load() {
   render();
 }
 
-function showLogin(message = "") {
-  el("app").classList.add("d-none");
-  el("login").classList.remove("d-none");
-  el("login-error").textContent = message;
-  setTimeout(() => el("login-token").focus(), 50);
+function syncAdminUI() {
+  const admin = state.isAdmin;
+  el("btn-new").classList.toggle("d-none", !admin);
+  el("btn-logout").classList.toggle("d-none", !admin);
+  el("btn-login").classList.toggle("d-none", admin);
+  el("detail-edit").classList.toggle("d-none", !admin);
+  el("detail-delete").classList.toggle("d-none", !admin);
+  render();
 }
 
-async function enterApp() {
-  el("login").classList.add("d-none");
-  el("app").classList.remove("d-none");
-  await load();
+function openLogin() {
+  el("login-token").value = "";
+  el("login-error").textContent = "";
+  loginModal.show();
 }
 
 function logout() {
   localStorage.removeItem(TOKEN_KEY);
   state.token = "";
-  state.prompts = [];
-  el("login-token").value = "";
-  showLogin();
+  state.isAdmin = false;
+  syncAdminUI();
+  showToast("已退出管理员模式");
 }
 
 /* ---------------- events ---------------- */
@@ -454,6 +461,7 @@ function bindEvents() {
     const action = event.target.closest("[data-act]")?.dataset.act;
 
     if (action === "star") {
+      if (!state.isAdmin) return;
       prompt.favorite = !prompt.favorite;
       render();
       api(`/api/prompts/${encodeURIComponent(prompt.id)}`, {
@@ -497,6 +505,7 @@ function bindEvents() {
   });
 
   el("btn-new").addEventListener("click", () => openEditor(null));
+  el("btn-login").addEventListener("click", openLogin);
   el("btn-logout").addEventListener("click", logout);
 
   el("btn-save").addEventListener("click", savePrompt);
@@ -542,12 +551,17 @@ function bindEvents() {
     if (!value) return;
     state.token = value;
     try {
-      await enterApp();
-      localStorage.setItem(TOKEN_KEY, value);
-      el("login-token").value = "";
+      await api("/api/auth");
     } catch (error) {
-      showLogin(error.message === "unauthorized" ? "口令不正确" : error.message);
+      state.token = "";
+      el("login-error").textContent = error.message === "unauthorized" ? "口令不正确" : error.message;
+      return;
     }
+    localStorage.setItem(TOKEN_KEY, value);
+    state.isAdmin = true;
+    loginModal.hide();
+    syncAdminUI();
+    showToast("已进入管理员模式");
   });
 
   let resizeTimer = null;
@@ -572,7 +586,7 @@ function bindEvents() {
     }
 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n"
-      && !editorOpen && !historyOpen) {
+      && state.isAdmin && !editorOpen && !historyOpen) {
       event.preventDefault();
       openEditor(null);
       return;
@@ -605,22 +619,24 @@ function bindEvents() {
 
 async function boot() {
   bindEvents();
+  el("app").classList.remove("d-none");
 
-  if (!state.token) {
-    showLogin();
-    return;
-  }
   try {
-    await enterApp();
+    await load();
   } catch (error) {
-    if (error.message === "unauthorized") {
+    showToast("加载失败：" + error.message);
+  }
+
+  if (state.token) {
+    try {
+      await api("/api/auth");
+      state.isAdmin = true;
+    } catch (_) {
       localStorage.removeItem(TOKEN_KEY);
       state.token = "";
-      showLogin("口令已失效，请重新输入");
-    } else {
-      showLogin("连接失败：" + error.message);
     }
   }
+  syncAdminUI();
 }
 
 boot();

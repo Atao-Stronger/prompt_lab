@@ -122,12 +122,36 @@ def health() -> dict:
     return {"ok": True, "count": count}
 
 
-@app.get("/api/prompts", dependencies=[Depends(require_token)])
+@app.get("/api/prompts")
 def list_prompts() -> dict:
     conn = connect()
     rows = conn.execute("SELECT data FROM prompts").fetchall()
     conn.close()
     return {"prompts": [json.loads(row["data"]) for row in rows]}
+
+
+@app.get("/api/auth", dependencies=[Depends(require_token)])
+def auth_check() -> dict:
+    return {"ok": True}
+
+
+@app.post("/api/prompts/{prompt_id}/hit")
+def hit_prompt(prompt_id: str) -> dict:
+    conn = connect()
+    row = conn.execute("SELECT data FROM prompts WHERE id = ?", (prompt_id,)).fetchone()
+    if row is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail="提示词不存在")
+    prompt = json.loads(row["data"])
+    prompt["usageCount"] = int(prompt.get("usageCount") or 0) + 1
+    prompt["lastUsedAt"] = now_iso()
+    conn.execute(
+        "UPDATE prompts SET data = ? WHERE id = ?",
+        (json.dumps(prompt, ensure_ascii=False), prompt_id),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True}
 
 
 @app.put("/api/prompts/{prompt_id}", dependencies=[Depends(require_token)])

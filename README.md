@@ -13,7 +13,8 @@
 - 一键复制原始 Markdown 文本，使用次数与最近使用排序，收藏置顶
 - 修改正文自动保存历史快照（上限 20 条），可查看、载入
 - 行内搜索：分类、正文
-- 单一访问口令，失败次数限流
+- 公开只读：任何人打开链接都能浏览和复制
+- 管理员口令才能新建 / 编辑 / 删除，入口在右上角；失败次数限流
 
 ## 目录
 
@@ -35,7 +36,7 @@ pip install -r requirements.txt
 ACCESS_TOKEN=devtoken DB_PATH=../data/dev.db uvicorn main:app --port 8080
 ```
 
-打开 <http://127.0.0.1:8080>，输入 `devtoken`。
+打开 <http://127.0.0.1:8080> 即可浏览；点右上角「管理员登录」，输入 `devtoken` 后可编辑。
 
 ## 线上架构
 
@@ -76,11 +77,12 @@ git push origin main
 
 - 网关在 `/opt/gateway`，独立 compose，配置在 `/opt/gateway/Caddyfile`。
   新增站点：改 Caddyfile 后 `docker exec gateway caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`，不中断现有站点。
-- 备份直接拷贝 `/opt/prompt_lab/data/prompt_lab.db` 即可；页面里也有「导出 JSON」。
-- 修改口令：编辑 `/opt/prompt_lab/.env` 后 `docker compose up -d`。
+- 备份直接拷贝 `/opt/prompt_lab/data/prompt_lab.db` 即可。
+- 修改管理员口令：编辑 `/opt/prompt_lab/.env` 后 `docker compose up -d`。
 
 ## 安全说明
 
-- 已启用 HTTPS；口令在传输中加密。
+- 已启用 HTTPS。
+- 列表与搜索接口公开，任何人拿到链接都能读取提示词；写入接口需要管理员口令。
 - 服务器 `root` 仍允许密码登录，且宝塔面板对公网开放（8888）。建议改用密钥登录并限制面板来源 IP。
 - 部署用户 `deploy` 属于 `docker` 组，等价于 root 权限，私钥只放在 GitHub Secrets。
